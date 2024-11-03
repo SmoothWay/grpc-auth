@@ -3,7 +3,10 @@ package main
 import (
 	"log/slog"
 	"os"
+	"os/signal"
+	"sso/internal/app"
 	"sso/internal/config"
+	"syscall"
 )
 
 const (
@@ -15,11 +18,19 @@ const (
 func main() {
 	cfg := config.MustLoad()
 	log := setupLogger(cfg.Env)
-	log.Info("starting application", slog.String("env", cfg.Env))
-	// TODO:
-	// инициализация обьект конфига
-	// инициализация логгера
-	// инициалзация приложения (app)
+	log.Info("starting application", slog.Any("cfg", cfg))
+
+	application := app.New(log, cfg.GRPC.Port, cfg.StoragePath, cfg.TokenTTL)
+
+	go application.GRPCsrv.MustRun()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
+
+	sig := <-stop
+
+	application.GRPCsrv.Stop()
+	log.Info("application stopped", slog.String("signal", sig.String()))
 }
 
 func setupLogger(env string) *slog.Logger {
